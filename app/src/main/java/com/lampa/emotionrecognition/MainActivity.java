@@ -1,20 +1,18 @@
 package com.lampa.emotionrecognition;
 
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.FileProvider;
-
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ImageDecoder;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.util.Log;
 import android.util.Pair;
 import android.view.View;
 import android.widget.Button;
@@ -23,17 +21,30 @@ import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.FileProvider;
+
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
-import com.google.firebase.ml.vision.FirebaseVision;
-import com.google.firebase.ml.vision.common.FirebaseVisionImage;
-import com.google.firebase.ml.vision.face.FirebaseVisionFace;
-import com.google.firebase.ml.vision.face.FirebaseVisionFaceDetector;
-import com.google.firebase.ml.vision.face.FirebaseVisionFaceDetectorOptions;
+//import com.google.firebase.ml.vision.face.FirebaseVisionFaceDetectorOptions;
+import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.face.Face;
+import com.google.mlkit.vision.face.FaceDetection;
+import com.google.mlkit.vision.face.FaceDetector;
+import com.google.mlkit.vision.face.FaceDetectorOptions;
+
 import com.lampa.emotionrecognition.classifiers.TFLiteImageClassifier;
 import com.lampa.emotionrecognition.utils.ImageUtils;
 import com.lampa.emotionrecognition.utils.SortingHelper;
+
+import org.tensorflow.lite.DataType;
+import org.tensorflow.lite.support.image.ImageProcessor;
+import org.tensorflow.lite.support.image.TensorImage;
+import org.tensorflow.lite.support.image.ops.ResizeOp;
+import org.tensorflow.lite.support.image.ops.ResizeWithCropOrPadOp;
+import org.tensorflow.lite.support.image.ops.Rot90Op;
 
 import java.io.File;
 import java.io.IOException;
@@ -50,7 +61,8 @@ public class MainActivity extends AppCompatActivity {
     private static final int GALLERY_REQUEST_CODE = 0;
     private static final int TAKE_PHOTO_REQUEST_CODE = 1;
 
-    private final String MODEL_FILE_NAME = "simple_classifier.tflite";
+//    private final String MODEL_FILE_NAME = "simple_classifier.tflite";
+    private final String MODEL_FILE_NAME = "model.tflite";
 
     private final int SCALED_IMAGE_BIGGEST_SIZE = 480;
 
@@ -77,6 +89,7 @@ public class MainActivity extends AppCompatActivity {
         mClassificationProgressBar = findViewById(R.id.classification_progress_bar);
 
         mClassifier = new TFLiteImageClassifier(
+                this,
                 this.getAssets(),
                 MODEL_FILE_NAME,
                 getResources().getStringArray(R.array.emotions));
@@ -126,12 +139,21 @@ public class MainActivity extends AppCompatActivity {
                     clearClassificationExpandableListView();
                     // We can immediately get an image URI from an intent data
                     Uri pickedImageUri = data.getData();
-                    processImageRequestResult(pickedImageUri);
+                    try {
+                        processImageRequestResult(pickedImageUri);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                     break;
                 // When a photo was taken successfully
                 case TAKE_PHOTO_REQUEST_CODE:
+                    Log.d("Test", "catured image");
                     clearClassificationExpandableListView();
-                    processImageRequestResult(mCurrentPhotoUri);
+                    try {
+                        processImageRequestResult(mCurrentPhotoUri);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                     break;
 
                 default:
@@ -149,7 +171,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // Function to handle successful new image acquisition
-    private void processImageRequestResult(Uri resultImageUri) {
+    private void processImageRequestResult(Uri resultImageUri) throws IOException {
         Bitmap scaledResultImageBitmap = getScaledImageBitmap(resultImageUri);
 
         mImageView.setImageBitmap(scaledResultImageBitmap);
@@ -187,6 +209,7 @@ public class MainActivity extends AppCompatActivity {
                         this,
                         BuildConfig.APPLICATION_ID + ".fileprovider",
                         photoFile);
+                Log.d("Test uri", String.valueOf(mCurrentPhotoUri));
 
                 intent.putExtra(MediaStore.EXTRA_OUTPUT, mCurrentPhotoUri);
                 startActivityForResult(intent, TAKE_PHOTO_REQUEST_CODE);
@@ -239,34 +262,62 @@ public class MainActivity extends AppCompatActivity {
         return scaledImageBitmap;
     }
 
-    private void detectFaces(Bitmap imageBitmap) {
-        FirebaseVisionFaceDetectorOptions faceDetectorOptions =
-                new FirebaseVisionFaceDetectorOptions.Builder()
-                        .setPerformanceMode(FirebaseVisionFaceDetectorOptions.ACCURATE)
-                        .setLandmarkMode(FirebaseVisionFaceDetectorOptions.NO_LANDMARKS)
-                        .setClassificationMode(FirebaseVisionFaceDetectorOptions.NO_CLASSIFICATIONS)
-                        .setMinFaceSize(0.1f)
-                        .build();
+  private void detectFaces(Bitmap imageBitmap) {
+//        FaceDetectorOptions faceDetectorOptions =
+//                new FaceDetectorOptions.Builder()
+//                        .setPerformanceMode(FaceDetectorOptions.ACCURATE)
+//                        .setLandmarkMode(FaceDetectorOptions.NO_LANDMARKS)
+//                        .setClassificationMode(FaceDetectorOptions.NO_CLASSIFICATIONS)
+//                        .setMinFaceSize(0.1f)
+//                        .build();
+//
+//      FaceDetectorOptions faceDetector = FirebaseVision.getInstance()
+//                .getVisionFaceDetector(faceDetectorOptions);
 
-        FirebaseVisionFaceDetector faceDetector = FirebaseVision.getInstance()
-                .getVisionFaceDetector(faceDetectorOptions);
+      FaceDetectorOptions faceDetectorOptions =
+              new FaceDetectorOptions.Builder()
+                      .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
+                      .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
+                      .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
+                      .build();
+
+// Real-time contour detection
+      FaceDetectorOptions faceDetector =
+              new FaceDetectorOptions.Builder()
+                      .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
+                      .build();
 
 
-        final FirebaseVisionImage firebaseImage = FirebaseVisionImage.fromBitmap(imageBitmap);
+//        final FirebaseVisionImage firebaseImage = FirebaseVisionImage.fromBitmap(imageBitmap);
+      FaceDetector detector = FaceDetection.getClient(faceDetector);
+//      ImageProcessor imageProcessor =
+//              new ImageProcessor.Builder()
+////                      .add(new ResizeWithCropOrPadOp(cropSize, cropSize))
+//                      .add(new ResizeOp(512, 512, ResizeOp.ResizeMethod.NEAREST_NEIGHBOR))
+////                      .add(new Rot90Op(numRoration))
+////                      .add(getPreprocessNormalizeOp())
+//                      .build();
+//      TensorImage inputImageBuffer;
+//      imageProcessor.process(inputImageBuffer);
 
-        Task<List<FirebaseVisionFace>> result =
-                faceDetector.detectInImage(firebaseImage)
+      InputImage firebaseImage = InputImage.fromBitmap(imageBitmap,0);
+        Task<List<Face>> result =
+                detector.process(firebaseImage)
                         .addOnSuccessListener(
-                                new OnSuccessListener<List<FirebaseVisionFace>>() {
+                                new OnSuccessListener<List<Face>>() {
                                     // When the search for faces was successfully completed
                                     @Override
-                                    public void onSuccess(List<FirebaseVisionFace> faces) {
-                                        Bitmap imageBitmap = firebaseImage.getBitmap();
+                                    public void onSuccess(List<Face> faces) {
+//                                        Bitmap imageBitmap = firebaseImage.getBitmap();
+//                                        ContentResolver contentResolver = getContentResolver();
+//                                        ImageDecoder.Source source = ImageDecoder.createSource(contentResolver, firebaseImage);
+//                                        Bitmap imageBitmap = ImageDecoder.decodeBitmap(source);
+
                                         // Temporary Bitmap for drawing
-                                        Bitmap tmpBitmap = Bitmap.createBitmap(
+                                        Bitmap tmpBitmap = imageBitmap.createBitmap(
                                                 imageBitmap.getWidth(),
                                                 imageBitmap.getHeight(),
-                                                imageBitmap.getConfig());
+                                                Bitmap.Config.ARGB_8888);
 
                                         // Create an image-based canvas
                                         Canvas tmpCanvas = new Canvas(tmpBitmap);
@@ -289,17 +340,17 @@ public class MainActivity extends AppCompatActivity {
                                             // faceId ~ face text number
                                             int faceId = 1;
 
-                                            for (FirebaseVisionFace face : faces) {
+                                            for (Face face : faces) {
                                                 Rect faceRect = getInnerRect(
                                                         face.getBoundingBox(),
                                                         imageBitmap.getWidth(),
                                                         imageBitmap.getHeight());
 
-                                                // Draw a rectangle around a face
+//                                                 Draw a rectangle around a face
                                                 paint.setStyle(Paint.Style.STROKE);
                                                 tmpCanvas.drawRect(faceRect, paint);
 
-                                                // Draw a face number in a rectangle
+//                                                 Draw a face number in a rectangle
                                                 paint.setStyle(Paint.Style.FILL);
                                                 tmpCanvas.drawText(
                                                         Integer.toString(faceId),
@@ -309,7 +360,7 @@ public class MainActivity extends AppCompatActivity {
                                                                 faceRect.height() * textIndentFactor,
                                                         paint);
 
-                                                // Get subarea with a face
+//                                                 Get subarea with a face
                                                 Bitmap faceBitmap = Bitmap.createBitmap(
                                                         imageBitmap,
                                                         faceRect.left,
@@ -356,9 +407,26 @@ public class MainActivity extends AppCompatActivity {
                                         setCalculationStatusUI(false);
                                     }
                                 });
-    }
+  }
 
     private void classifyEmotions(Bitmap imageBitmap, int faceId) {
+//        DataType imageDataType = mi.getInputTensor(imageTensorIndex).dataType();
+//        int probabilityTensorIndex = 0;
+//        int[] probabilityShape =
+//                tflite.getOutputTensor(probabilityTensorIndex).shape(); // {1, NUM_CLASSES}
+//        DataType probabilityDataType = tflite.getOutputTensor(probabilityTensorIndex).dataType();
+
+        // Creates the input tensor.
+        inputImageBuffer = new TensorImage(imageDataType);
+        inputImageBuffer.load(imageBitmap);
+        ImageProcessor imageProcessor =
+                new ImageProcessor.Builder()
+                        .add(new ResizeWithCropOrPadOp(cropSize, cropSize))
+                        .add(new ResizeOp(imageSizeX, imageSizeY, ResizeOp.ResizeMethod.NEAREST_NEIGHBOR))
+                        .add(new Rot90Op(numRoration))
+                        .add(getPreprocessNormalizeOp())
+                        .build();
+        return imageProcessor.process(inputImageBuffer);
         Map<String, Float> result = mClassifier.classify(imageBitmap, true);
 
         // Sort by increasing probability

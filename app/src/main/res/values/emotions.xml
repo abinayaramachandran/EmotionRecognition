@@ -7,6 +7,5 @@
         <item>happy</item>
         <item>neutral</item>
         <item>sad</item>
-        <item>surprise</item>
     </string-array>
 </resources>

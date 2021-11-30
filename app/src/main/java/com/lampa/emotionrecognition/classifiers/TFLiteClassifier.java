@@ -1,13 +1,18 @@
 package com.lampa.emotionrecognition.classifiers;
 
+import android.app.Activity;
 import android.content.res.AssetFileDescriptor;
 import android.content.res.AssetManager;
+import android.os.FileUtils;
+import org.tensorflow.lite.support.common.FileUtil;
 
+//import com.google.firebase.firestore.util.FileUtil;
 import com.lampa.emotionrecognition.classifiers.behaviors.ClassifyBehavior;
 
 import org.tensorflow.lite.Interpreter;
 import org.tensorflow.lite.gpu.GpuDelegate;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.MappedByteBuffer;
@@ -28,14 +33,14 @@ public abstract class TFLiteClassifier {
 
     protected ClassifyBehavior classifyBehavior;
 
-    public TFLiteClassifier(AssetManager assetManager, String modelFileName, String[] labels) {
+    public TFLiteClassifier(Activity activity, AssetManager assetManager, String modelFileName, String[] labels) {
         mAssetManager = assetManager;
 
         GpuDelegate delegate = new GpuDelegate();
         mTFLiteInterpreterOptions = new Interpreter.Options().addDelegate(delegate);
-
         try {
-            mInterpreter = new Interpreter(loadModel(modelFileName), mTFLiteInterpreterOptions);
+            MappedByteBuffer tfliteModel = FileUtil.loadMappedFile(activity, modelFileName);
+            mInterpreter = new Interpreter(tfliteModel);
         } catch (Exception ex) {
             ex.printStackTrace();
         }
