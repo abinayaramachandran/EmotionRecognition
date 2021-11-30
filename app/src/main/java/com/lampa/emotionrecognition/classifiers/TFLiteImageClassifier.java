@@ -8,10 +8,13 @@ import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.util.Log;
 
+import org.tensorflow.lite.DataType;
 import org.tensorflow.lite.support.image.ImageProcessor;
+import org.tensorflow.lite.support.image.TensorImage;
 import org.tensorflow.lite.support.image.ops.ResizeOp;
 import org.tensorflow.lite.support.image.ops.ResizeWithCropOrPadOp;
 import org.tensorflow.lite.support.image.ops.Rot90Op;
+import org.tensorflow.lite.support.tensorbuffer.TensorBuffer;
 
 import java.util.Formatter;
 import java.util.HashMap;
@@ -19,6 +22,11 @@ import java.util.Map;
 
 // Image classifier that uses tflite format
 public class TFLiteImageClassifier extends TFLiteClassifier {
+
+    private TensorImage inputImageBuffer;
+
+    /** Output probability TensorBuffer. */
+    private TensorBuffer outputProbabilityBuffer;
 
     public TFLiteImageClassifier(Activity activity, AssetManager assetManager, String modelFileName, String[] labels) {
         super(activity, assetManager, modelFileName, labels);
@@ -33,7 +41,7 @@ public class TFLiteImageClassifier extends TFLiteClassifier {
     }
 
     private Map<String, Float> classify(float[] input) {
-        float[][] outputArr = classifyBehavior.classify(input);
+        float[][] outputArr = classifyBehavior.classify(inputImageBuffer.getBuffer());
 
         // Checked compliance with the array of strings specified in the constructor
         if (mLabels.size() != outputArr[0].length) {
@@ -62,15 +70,27 @@ public class TFLiteImageClassifier extends TFLiteClassifier {
 
     private float[] preprocessImage(Bitmap imageBitmap, boolean useFilter) {
         //Scale an image
+        int imageTensorIndex = 0;
+        int[] imageShape = mInterpreter.getInputTensor(imageTensorIndex).shape(); // {1, height, width, 3}
 
-//        ImageProcessor imageProcessor =
-//                new ImageProcessor.Builder()
+
+        DataType imageDataType = mInterpreter.getInputTensor(imageTensorIndex).dataType();
+        int probabilityTensorIndex = 0;
+        int[] probabilityShape =
+                mInterpreter.getOutputTensor(probabilityTensorIndex).shape(); // {1, NUM_CLASSES}
+        DataType probabilityDataType = mInterpreter.getOutputTensor(probabilityTensorIndex).dataType();
+
+        // Creates the input tensor.
+        inputImageBuffer = new TensorImage(imageDataType);
+        inputImageBuffer.load(imageBitmap);
+        ImageProcessor imageProcessor =
+                new ImageProcessor.Builder()
 //                        .add(new ResizeWithCropOrPadOp(cropSize, cropSize))
-//                        .add(new ResizeOp(imageSizeX, imageSizeY, ResizeOp.ResizeMethod.NEAREST_NEIGHBOR))
-//                        .add(new Rot90Op(numRoration))
+                        .add(new ResizeOp(512, 512, ResizeOp.ResizeMethod.NEAREST_NEIGHBOR))
+                        .add(new Rot90Op(0))
 //                        .add(getPreprocessNormalizeOp())
-//                        .build();
-//        return imageProcessor.process(inputImageBuffer);
+                        .build();
+        imageProcessor.process(inputImageBuffer);
 
 
         Bitmap scaledImage = Bitmap.createScaledBitmap(

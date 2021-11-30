@@ -67,6 +67,7 @@ public class MainActivity extends AppCompatActivity {
     private final int SCALED_IMAGE_BIGGEST_SIZE = 480;
 
     private TFLiteImageClassifier mClassifier;
+    private TensorImage inputImageBuffer;
 
     private ProgressBar mClassificationProgressBar;
 
@@ -410,23 +411,8 @@ public class MainActivity extends AppCompatActivity {
   }
 
     private void classifyEmotions(Bitmap imageBitmap, int faceId) {
-//        DataType imageDataType = mi.getInputTensor(imageTensorIndex).dataType();
-//        int probabilityTensorIndex = 0;
-//        int[] probabilityShape =
-//                tflite.getOutputTensor(probabilityTensorIndex).shape(); // {1, NUM_CLASSES}
-//        DataType probabilityDataType = tflite.getOutputTensor(probabilityTensorIndex).dataType();
 
-        // Creates the input tensor.
-        inputImageBuffer = new TensorImage(imageDataType);
-        inputImageBuffer.load(imageBitmap);
-        ImageProcessor imageProcessor =
-                new ImageProcessor.Builder()
-                        .add(new ResizeWithCropOrPadOp(cropSize, cropSize))
-                        .add(new ResizeOp(imageSizeX, imageSizeY, ResizeOp.ResizeMethod.NEAREST_NEIGHBOR))
-                        .add(new Rot90Op(numRoration))
-                        .add(getPreprocessNormalizeOp())
-                        .build();
-        return imageProcessor.process(inputImageBuffer);
+
         Map<String, Float> result = mClassifier.classify(imageBitmap, true);
 
         // Sort by increasing probability
